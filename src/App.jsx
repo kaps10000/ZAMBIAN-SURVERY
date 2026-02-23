@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import MapView from './components/MapView'
 import CoordinatePanel from './components/CoordinatePanel'
 import AreaCalculator from './components/AreaCalculator'
@@ -6,10 +6,11 @@ import SitePlanEditor from './components/SitePlanEditor'
 import Toolbar, { ToolProvider } from './components/Toolbar'
 import ExportPanel from './components/ExportPanel'
 import FileImport from './components/FileImport'
+import Login from './components/Login'
 import { saveProject, loadProject, listProjects } from './utils/storage'
 import './App.css'
 
-function AppContent() {
+function AppContent({ user, onLogout }) {
   const [points, setPoints] = useState([])
   const [activeTab, setActiveTab] = useState('map') // 'map' | 'sitePlan'
   const [coordinateSystem, setCoordinateSystem] = useState('wgs84') // 'wgs84' | 'utm'
@@ -87,6 +88,10 @@ function AppContent() {
         <div className="header-actions">
           <button onClick={handleSave} className="btn btn-primary">Save</button>
           <button onClick={handleLoad} className="btn">Load</button>
+          <span style={{ color: '#999', fontSize: '0.85rem', marginLeft: '1rem' }}>
+            Welcome, {user}
+          </span>
+          <button onClick={onLogout} className="btn btn-danger">Logout</button>
         </div>
       </header>
 
@@ -186,9 +191,38 @@ function AppContent() {
 }
 
 export default function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [user, setUser] = useState(null)
+
+  // Check if user is already logged in
+  useEffect(() => {
+    const auth = localStorage.getItem('zambia_survey_auth')
+    const savedUser = localStorage.getItem('zambia_survey_user')
+    if (auth === 'true' && savedUser) {
+      setIsAuthenticated(true)
+      setUser(savedUser)
+    }
+  }, [])
+
+  const handleLogin = (username) => {
+    setIsAuthenticated(true)
+    setUser(username)
+  }
+
+  const handleLogout = () => {
+    localStorage.removeItem('zambia_survey_auth')
+    localStorage.removeItem('zambia_survey_user')
+    setIsAuthenticated(false)
+    setUser(null)
+  }
+
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />
+  }
+
   return (
     <ToolProvider>
-      <AppContent />
+      <AppContent user={user} onLogout={handleLogout} />
     </ToolProvider>
   )
 }
