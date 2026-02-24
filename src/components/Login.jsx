@@ -12,11 +12,13 @@ export default function Login({ onLogin }) {
     setError('')
 
     // Hardcoded credentials
-    const validUsername = 'Danny'
-    const validPassword = 'Chimthero8'
+    const users = {
+      'Danny': 'Chimthero8',
+      'kaps': 'kaps876'
+    }
 
     setTimeout(() => {
-      if (username === validUsername && password === validPassword) {
+      if (users[username] && users[username] === password) {
         localStorage.setItem('zambia_survey_auth', 'true')
         localStorage.setItem('zambia_survey_user', username)
         onLogin(username)
