@@ -470,32 +470,112 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
 
         {step === 'paste' && (
           <div>
-            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Type or paste your coordinates below. One pair per line:
+            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '0.75rem' }}>
+              Enter your UTM coordinates:
             </p>
 
-            <div style={{ background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem', fontSize: '0.8rem' }}>
-              <strong>Example formats:</strong><br/>
-              680011, 8550257<br/>
-              680219.533 8550400.523<br/>
-              E: 680276 N: 8550433
+            {/* Quick table entry */}
+            <div style={{ marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                <div style={{ flex: 1, fontWeight: 'bold', fontSize: '0.85rem', textAlign: 'center' }}>Easting (X)</div>
+                <div style={{ flex: 1, fontWeight: 'bold', fontSize: '0.85rem', textAlign: 'center' }}>Northing (Y)</div>
+                <div style={{ width: '30px' }}></div>
+              </div>
+
+              {(manualText || '').split('\n').filter(line => line.trim()).concat(['']).map((line, idx) => {
+                const parts = line.split(/[,\s]+/).filter(p => p)
+                const easting = parts[0] || ''
+                const northing = parts[1] || ''
+
+                return (
+                  <div key={idx} style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="680011"
+                      value={easting}
+                      onChange={(e) => {
+                        const lines = (manualText || '').split('\n').filter(l => l.trim())
+                        while (lines.length <= idx) lines.push('')
+                        const oldParts = lines[idx].split(/[,\s]+/).filter(p => p)
+                        lines[idx] = `${e.target.value}, ${oldParts[1] || ''}`
+                        setManualText(lines.join('\n'))
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '0.6rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '0.95rem',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="8550257"
+                      value={northing}
+                      onChange={(e) => {
+                        const lines = (manualText || '').split('\n').filter(l => l.trim())
+                        while (lines.length <= idx) lines.push('')
+                        const oldParts = lines[idx].split(/[,\s]+/).filter(p => p)
+                        lines[idx] = `${oldParts[0] || ''}, ${e.target.value}`
+                        setManualText(lines.join('\n'))
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '0.6rem',
+                        border: '1px solid #ddd',
+                        borderRadius: '4px',
+                        fontSize: '0.95rem',
+                        fontFamily: 'monospace'
+                      }}
+                    />
+                    {idx < (manualText || '').split('\n').filter(l => l.trim()).length && (
+                      <button
+                        onClick={() => {
+                          const lines = manualText.split('\n').filter(l => l.trim())
+                          lines.splice(idx, 1)
+                          setManualText(lines.join('\n'))
+                        }}
+                        style={{
+                          width: '30px',
+                          border: 'none',
+                          background: '#fee',
+                          color: '#c00',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '1rem'
+                        }}
+                      >
+                        ×
+                      </button>
+                    )}
+                    {idx >= (manualText || '').split('\n').filter(l => l.trim()).length && (
+                      <div style={{ width: '30px' }}></div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
+
+            <p style={{ fontSize: '0.8rem', color: '#666', marginBottom: '0.75rem' }}>
+              Or paste all coordinates at once:
+            </p>
 
             <textarea
               value={manualText}
               onChange={(e) => setManualText(e.target.value)}
               placeholder="680011.389, 8550257.482
 680219.533, 8550400.523
-680276.903, 8550433.172
-680429.824, 8550157.706
-680230.069, 8549966.487"
+680276.903, 8550433.172"
               style={{
                 width: '100%',
-                height: '150px',
-                padding: '0.75rem',
+                height: '80px',
+                padding: '0.5rem',
                 border: '1px solid #ddd',
                 borderRadius: '4px',
-                fontSize: '0.9rem',
+                fontSize: '0.85rem',
                 fontFamily: 'monospace',
                 resize: 'vertical'
               }}
