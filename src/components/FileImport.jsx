@@ -58,45 +58,94 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
 
         // Create canvas for preprocessing
         const canvas = document.createElement('canvas')
-        const ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
 
-        // Scale image if too large (helps mobile)
-        const maxSize = 2000
+        // Scale image - larger is better for OCR (but not too large)
+        const minSize = 1500
+        const maxSize = 3000
         let width = img.width
         let height = img.height
 
+        // Scale up small images for better OCR
+        if (width < minSize && height < minSize) {
+          const scale = minSize / Math.min(width, height)
+          width *= scale
+          height *= scale
+        }
+
+        // Scale down very large images
         if (width > maxSize || height > maxSize) {
-          if (width > height) {
-            height = (height / width) * maxSize
-            width = maxSize
-          } else {
-            width = (width / height) * maxSize
-            height = maxSize
-          }
+          const scale = maxSize / Math.max(width, height)
+          width *= scale
+          height *= scale
         }
 
         canvas.width = width
         canvas.height = height
 
-        // Draw and enhance image (increase contrast for better OCR)
-        ctx.filter = 'contrast(1.2) brightness(1.1)'
+        // Draw original image
         ctx.drawImage(img, 0, 0, width, height)
+
+        // Get image data for processing
+        const imageData = ctx.getImageData(0, 0, width, height)
+        const data = imageData.data
+
+        // Convert to grayscale and apply contrast enhancement + thresholding
+        for (let i = 0; i < data.length; i += 4) {
+          // Convert to grayscale
+          const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+
+          // Increase contrast
+          let enhanced = ((gray - 128) * 1.5) + 128
+          enhanced = Math.max(0, Math.min(255, enhanced))
+
+          // Apply threshold for cleaner text (binarization)
+          const threshold = 140
+          const final = enhanced < threshold ? 0 : 255
+
+          data[i] = final     // R
+          data[i + 1] = final // G
+          data[i + 2] = final // B
+          // Alpha stays the same
+        }
+
+        ctx.putImageData(imageData, 0, 0)
 
         URL.revokeObjectURL(imageUrl)
 
-        setProgress('Performing OCR on image...')
+        setProgress('Performing OCR (this may take a moment)...')
+
+        // Try OCR with settings optimized for tables/documents
         const result = await Tesseract.recognize(canvas, 'eng', {
           logger: (m) => {
             if (m.status === 'recognizing text') {
               setProgress(`OCR: ${Math.round(m.progress * 100)}%`)
             }
-          }
+          },
+          tessedit_pageseg_mode: '6', // Assume uniform block of text
+          preserve_interword_spaces: '1'
         })
         text = result.data.text
 
-        // If OCR result is too short, it likely failed - prompt manual entry
-        if (text.trim().length < 20) {
-          setProgress('OCR could not read the image well. Try pasting text manually.')
+        // If first attempt got poor results, try with different settings
+        if (text.replace(/[^0-9]/g, '').length < 10) {
+          setProgress('Trying alternate OCR settings...')
+          const result2 = await Tesseract.recognize(canvas, 'eng', {
+            logger: (m) => {
+              if (m.status === 'recognizing text') {
+                setProgress(`OCR pass 2: ${Math.round(m.progress * 100)}%`)
+              }
+            },
+            tessedit_pageseg_mode: '4' // Assume single column of variable sizes
+          })
+          if (result2.data.text.replace(/[^0-9]/g, '').length > text.replace(/[^0-9]/g, '').length) {
+            text = result2.data.text
+          }
+        }
+
+        // If OCR result still has few numbers, it likely failed
+        if (text.replace(/[^0-9]/g, '').length < 10) {
+          setProgress('OCR could not read numbers well. Try pasting text manually.')
         }
       } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
         // PDF extraction
