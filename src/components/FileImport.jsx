@@ -12,12 +12,13 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
   const [progress, setProgress] = useState('')
   const [extractedText, setExtractedText] = useState('')
   const [foundCoordinates, setFoundCoordinates] = useState([])
-  const [step, setStep] = useState('upload') // 'upload' | 'settings' | 'preview'
+  const [step, setStep] = useState('upload') // 'upload' | 'paste' | 'settings' | 'preview'
   const [settings, setSettings] = useState({
     coordSystem: 'utm',
     utmZone: currentUtmZone || 35,
     hemisphere: 'S'
   })
+  const [manualText, setManualText] = useState('')
   const fileInputRef = useRef(null)
 
   const resetState = () => {
@@ -26,6 +27,7 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
     setFoundCoordinates([])
     setProgress('')
     setIsProcessing(false)
+    setManualText('')
   }
 
   const handleFileSelect = async (e) => {
@@ -88,11 +90,14 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
             if (m.status === 'recognizing text') {
               setProgress(`OCR: ${Math.round(m.progress * 100)}%`)
             }
-          },
-          tessedit_char_whitelist: '0123456789.,- ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°\'"',
-          tessedit_pageseg_mode: '6' // Assume uniform block of text
+          }
         })
         text = result.data.text
+
+        // If OCR result is too short, it likely failed - prompt manual entry
+        if (text.trim().length < 20) {
+          setProgress('OCR could not read the image well. Try pasting text manually.')
+        }
       } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
         // PDF extraction
         setProgress('Extracting text from PDF...')
@@ -309,14 +314,31 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
         {step === 'upload' && (
           <div>
             <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
-              Upload a file containing coordinates. Supported formats:
+              Choose how to import coordinates:
             </p>
-            <ul style={{ color: '#666', fontSize: '0.85rem', marginBottom: '1rem', paddingLeft: '1.5rem' }}>
-              <li>Images (JPG, PNG) - OCR will extract text</li>
-              <li>PDF documents</li>
-              <li>Text/CSV files</li>
-              <li>Word documents (.docx)</li>
-            </ul>
+
+            {/* Manual paste option - best for mobile */}
+            <button
+              onClick={() => setStep('paste')}
+              style={{
+                width: '100%',
+                padding: '1rem',
+                marginBottom: '0.75rem',
+                border: '2px solid #D97757',
+                borderRadius: '8px',
+                background: '#fff',
+                cursor: 'pointer',
+                fontSize: '0.95rem',
+                color: '#D97757',
+                fontWeight: '500'
+              }}
+            >
+              Type/Paste Coordinates (Recommended)
+            </button>
+
+            <p style={{ color: '#666', fontSize: '0.85rem', marginBottom: '0.75rem', textAlign: 'center' }}>
+              - or upload a file -
+            </p>
 
             {/* File input for selecting from gallery/files */}
             <input
@@ -397,6 +419,68 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
           </div>
         )}
 
+        {step === 'paste' && (
+          <div>
+            <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
+              Type or paste your coordinates below. One pair per line:
+            </p>
+
+            <div style={{ background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginBottom: '0.75rem', fontSize: '0.8rem' }}>
+              <strong>Example formats:</strong><br/>
+              680011, 8550257<br/>
+              680219.533 8550400.523<br/>
+              E: 680276 N: 8550433
+            </div>
+
+            <textarea
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              placeholder="680011.389, 8550257.482
+680219.533, 8550400.523
+680276.903, 8550433.172
+680429.824, 8550157.706
+680230.069, 8549966.487"
+              style={{
+                width: '100%',
+                height: '150px',
+                padding: '0.75rem',
+                border: '1px solid #ddd',
+                borderRadius: '4px',
+                fontSize: '0.9rem',
+                fontFamily: 'monospace',
+                resize: 'vertical'
+              }}
+            />
+
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '1rem' }}>
+              <button
+                onClick={() => setStep('upload')}
+                style={{ flex: 1, padding: '0.75rem', border: '1px solid #ddd', borderRadius: '4px', cursor: 'pointer' }}
+              >
+                Back
+              </button>
+              <button
+                onClick={() => {
+                  setExtractedText(manualText)
+                  setStep('settings')
+                }}
+                disabled={!manualText.trim()}
+                style={{
+                  flex: 1,
+                  padding: '0.75rem',
+                  background: manualText.trim() ? '#D97757' : '#ccc',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: manualText.trim() ? 'pointer' : 'not-allowed'
+                }}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+
         {step === 'settings' && (
           <div>
             <p style={{ color: '#666', fontSize: '0.9rem', marginBottom: '1rem' }}>
@@ -456,6 +540,20 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
                 {extractedText.substring(0, 500)}{extractedText.length > 500 ? '...' : ''}
               </pre>
             </div>
+
+            {extractedText.trim().length < 30 && (
+              <div style={{ background: '#fff3cd', padding: '0.75rem', borderRadius: '4px', marginBottom: '1rem' }}>
+                <p style={{ margin: 0, color: '#856404', fontSize: '0.85rem' }}>
+                  OCR didn't extract much text.
+                  <button
+                    onClick={() => setStep('paste')}
+                    style={{ background: 'none', border: 'none', color: '#D97757', textDecoration: 'underline', cursor: 'pointer', fontSize: '0.85rem' }}
+                  >
+                    Try typing/pasting manually instead
+                  </button>
+                </p>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: '0.5rem' }}>
               <button
