@@ -318,34 +318,81 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
               <li>Word documents (.docx)</li>
             </ul>
 
+            {/* File input for selecting from gallery/files */}
             <input
               type="file"
               ref={fileInputRef}
               onChange={handleFileSelect}
               accept="image/*,.pdf,.txt,.csv,.doc,.docx"
+              style={{ display: 'none' }}
+            />
+
+            {/* Camera input for taking photo (mobile only) */}
+            <input
+              type="file"
+              id="cameraInput"
+              onChange={handleFileSelect}
+              accept="image/*"
               capture="environment"
               style={{ display: 'none' }}
             />
 
+            {/* Desktop view - single button */}
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={isProcessing}
+              className="desktop-only"
               style={{
                 width: '100%',
-                padding: '1.5rem',
+                padding: '2rem',
                 border: '2px dashed #ddd',
                 borderRadius: '8px',
                 background: '#f9f9f9',
                 cursor: 'pointer',
-                fontSize: '1rem',
-                marginBottom: '0.5rem'
+                fontSize: '1rem'
               }}
             >
-              {isProcessing ? progress : 'Take Photo or Select File'}
+              {isProcessing ? progress : 'Click to select file'}
             </button>
 
-            <p style={{ fontSize: '0.8rem', color: '#666', textAlign: 'center', margin: 0 }}>
-              Tip: For best results, take a clear photo with good lighting
+            {/* Mobile view - two buttons */}
+            <div className="mobile-only" style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isProcessing}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: '2px dashed #ddd',
+                  borderRadius: '8px',
+                  background: '#f9f9f9',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+              >
+                {isProcessing ? progress : 'Select File'}
+              </button>
+
+              <button
+                onClick={() => document.getElementById('cameraInput')?.click()}
+                disabled={isProcessing}
+                style={{
+                  flex: 1,
+                  padding: '1rem',
+                  border: '2px solid #D97757',
+                  borderRadius: '8px',
+                  background: '#fff',
+                  cursor: 'pointer',
+                  fontSize: '0.9rem',
+                  color: '#D97757'
+                }}
+              >
+                Take Photo
+              </button>
+            </div>
+
+            <p className="mobile-only" style={{ fontSize: '0.8rem', color: '#666', textAlign: 'center', margin: 0 }}>
+              Tip: For best results, use good lighting and hold steady
             </p>
           </div>
         )}

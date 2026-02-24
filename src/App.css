@@ -355,8 +355,25 @@ body {
   margin: 0 0.5rem;
 }
 
+/* Mobile/Desktop visibility */
+.mobile-only {
+  display: none !important;
+}
+
+.desktop-only {
+  display: block !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
+  .mobile-only {
+    display: flex !important;
+  }
+
+  .desktop-only {
+    display: none !important;
+  }
+
   .app-content {
     flex-direction: column;
   }
