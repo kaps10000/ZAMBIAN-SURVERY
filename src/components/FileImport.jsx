@@ -41,14 +41,56 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
       const fileName = file.name.toLowerCase()
 
       if (fileType.startsWith('image/') || fileName.match(/\.(jpg|jpeg|png|gif|bmp|webp)$/)) {
-        // OCR for images
+        // OCR for images with optimized settings for coordinate extraction
+        setProgress('Preparing image for OCR...')
+
+        // Create image element for preprocessing
+        const img = new Image()
+        const imageUrl = URL.createObjectURL(file)
+
+        await new Promise((resolve, reject) => {
+          img.onload = resolve
+          img.onerror = reject
+          img.src = imageUrl
+        })
+
+        // Create canvas for preprocessing
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+
+        // Scale image if too large (helps mobile)
+        const maxSize = 2000
+        let width = img.width
+        let height = img.height
+
+        if (width > maxSize || height > maxSize) {
+          if (width > height) {
+            height = (height / width) * maxSize
+            width = maxSize
+          } else {
+            width = (width / height) * maxSize
+            height = maxSize
+          }
+        }
+
+        canvas.width = width
+        canvas.height = height
+
+        // Draw and enhance image (increase contrast for better OCR)
+        ctx.filter = 'contrast(1.2) brightness(1.1)'
+        ctx.drawImage(img, 0, 0, width, height)
+
+        URL.revokeObjectURL(imageUrl)
+
         setProgress('Performing OCR on image...')
-        const result = await Tesseract.recognize(file, 'eng', {
+        const result = await Tesseract.recognize(canvas, 'eng', {
           logger: (m) => {
             if (m.status === 'recognizing text') {
               setProgress(`OCR: ${Math.round(m.progress * 100)}%`)
             }
-          }
+          },
+          tessedit_char_whitelist: '0123456789.,- ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz°\'"',
+          tessedit_pageseg_mode: '6' // Assume uniform block of text
         })
         text = result.data.text
       } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
@@ -105,7 +147,29 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
     setProgress('Parsing coordinates...')
 
     const coords = []
-    const text = extractedText
+    // Clean up common OCR errors before parsing
+    let text = extractedText
+      .replace(/[oO]/g, (match, offset, string) => {
+        // Replace O with 0 only if surrounded by digits
+        const before = string[offset - 1]
+        const after = string[offset + 1]
+        if ((before && /\d/.test(before)) || (after && /\d/.test(after))) {
+          return '0'
+        }
+        return match
+      })
+      .replace(/[lI]/g, '1') // Common OCR error: l or I as 1
+      .replace(/[Ss]/g, (match, offset, string) => {
+        // Replace S with 5 only if surrounded by digits
+        const before = string[offset - 1]
+        const after = string[offset + 1]
+        if ((before && /\d/.test(before)) || (after && /\d/.test(after))) {
+          return '5'
+        }
+        return match
+      })
+      .replace(/,\s*/g, ', ') // Normalize comma spacing
+      .replace(/\s+/g, ' ') // Normalize whitespace
 
     // Common coordinate patterns
     const patterns = [
@@ -119,28 +183,42 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
 
     // Try UTM pattern first if UTM is selected
     if (settings.coordSystem === 'utm') {
-      const utmPattern = /(\d{5,7}(?:\.\d+)?)[,\s]+(\d{6,8}(?:\.\d+)?)/g
-      let match
-      while ((match = utmPattern.exec(text)) !== null) {
-        const easting = parseFloat(match[1])
-        const northing = parseFloat(match[2])
+      // Multiple patterns to catch different formats
+      const utmPatterns = [
+        /(\d{5,7}(?:\.\d+)?)[,\s]+(\d{6,8}(?:\.\d+)?)/g, // Standard: 680011, 8550258
+        /[EeXx][:\s]*(\d{5,7}(?:\.\d+)?)[,\s]*[NnYy][:\s]*(\d{6,8}(?:\.\d+)?)/g, // E: 680011 N: 8550258
+        /(\d{6,7})[\s,]+(\d{7,8})/g, // Simple: 680011 8550258
+      ]
 
-        // Validate UTM ranges (easting 100000-900000, northing for S hemisphere)
-        if (easting >= 100000 && easting <= 900000 && northing >= 7000000 && northing <= 10000000) {
-          try {
-            const { lat, lng } = utmToWgs84(easting, northing, settings.utmZone, settings.hemisphere)
-            if (isInZambia(lat, lng)) {
-              coords.push({
-                original: `${easting}, ${northing}`,
-                easting,
-                northing,
-                lat,
-                lng,
-                valid: true
-              })
+      for (const utmPattern of utmPatterns) {
+        let match
+        while ((match = utmPattern.exec(text)) !== null) {
+          const easting = parseFloat(match[1])
+          const northing = parseFloat(match[2])
+
+          // Validate UTM ranges (easting 100000-900000, northing for S hemisphere)
+          if (easting >= 100000 && easting <= 900000 && northing >= 7000000 && northing <= 11000000) {
+            try {
+              const { lat, lng } = utmToWgs84(easting, northing, settings.utmZone, settings.hemisphere)
+              if (isInZambia(lat, lng)) {
+                // Check if we already have this coordinate (avoid duplicates)
+                const exists = coords.some(c =>
+                  Math.abs(c.easting - easting) < 1 && Math.abs(c.northing - northing) < 1
+                )
+                if (!exists) {
+                  coords.push({
+                    original: `${easting}, ${northing}`,
+                    easting,
+                    northing,
+                    lat,
+                    lng,
+                    valid: true
+                  })
+                }
+              }
+            } catch (e) {
+              // Skip invalid coordinates
             }
-          } catch (e) {
-            // Skip invalid coordinates
           }
         }
       }
@@ -245,6 +323,7 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
               ref={fileInputRef}
               onChange={handleFileSelect}
               accept="image/*,.pdf,.txt,.csv,.doc,.docx"
+              capture="environment"
               style={{ display: 'none' }}
             />
 
@@ -253,16 +332,21 @@ export default function FileImport({ onImportPoints, currentUtmZone }) {
               disabled={isProcessing}
               style={{
                 width: '100%',
-                padding: '2rem',
+                padding: '1.5rem',
                 border: '2px dashed #ddd',
                 borderRadius: '8px',
                 background: '#f9f9f9',
                 cursor: 'pointer',
-                fontSize: '1rem'
+                fontSize: '1rem',
+                marginBottom: '0.5rem'
               }}
             >
-              {isProcessing ? progress : 'Click to select file'}
+              {isProcessing ? progress : 'Take Photo or Select File'}
             </button>
+
+            <p style={{ fontSize: '0.8rem', color: '#666', textAlign: 'center', margin: 0 }}>
+              Tip: For best results, take a clear photo with good lighting
+            </p>
           </div>
         )}
 
